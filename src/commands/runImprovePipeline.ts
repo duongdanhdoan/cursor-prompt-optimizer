@@ -56,6 +56,7 @@ export async function runImprovePipeline(input: ImprovePipelineInput): Promise<I
     query: analysis.searchQuery,
     projectRoot: input.projectRoot,
     limit: 24,
+    identifiers: [...analysis.identifiers, ...analysis.filePaths],
   });
   const retrievalMs = Math.max(0, now() - retrievalStarted);
 

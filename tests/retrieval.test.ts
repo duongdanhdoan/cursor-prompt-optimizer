@@ -8,6 +8,7 @@ import {
 } from "../src/memory/ExistingMemoryAdapter";
 import { rankResults } from "../src/memory/rankResults";
 import type { MemoryHit } from "../src/memory/MemoryAdapter";
+import { reconcileMemoryHits } from "../src/memory/reconcileHits";
 import { analyzePrompt } from "../src/prompt/analyzePrompt";
 
 test("resolveProjectName prefers the workspace basename when two indexes share a root", () => {
@@ -90,12 +91,14 @@ test("rankResults drops builtins, weak hits, duplicates, and off-repo paths", ()
   );
 });
 
-test("ExistingMemoryAdapter uses one list_projects plus one search_graph call and never indexes", async () => {
+test("ExistingMemoryAdapter uses semantic search plus identifier search and never indexes", async () => {
   const tools: string[] = [];
+  const queries: Array<Record<string, unknown>> = [];
   const adapter = new ExistingMemoryAdapter({
     cliPath: "/fake/codebase-memory-mcp",
     runCli: async (_cliPath, tool, args) => {
       tools.push(tool);
+      queries.push(args);
       if (tool === "list_projects") {
         return {
           projects: [{ name: "mobile-app", root_path: "/repo" }],
@@ -103,13 +106,18 @@ test("ExistingMemoryAdapter uses one list_projects plus one search_graph call an
       }
       if (tool === "search_graph") {
         assert.equal(args.project, "mobile-app");
-        assert.ok(Array.isArray(args.semantic_query));
         assert.equal(args.format, "json");
+        if (args.semantic_query) {
+          return {
+            semantic: {
+              cols: ["qn", "label", "file", "score"],
+              rows: [["mobile-app.shadow.InsetBoxDecoration.scale", "Method", "lib/box_decoration_in.dart", 0.07]],
+            },
+          };
+        }
         return {
-          semantic: {
-            cols: ["qn", "label", "file", "score"],
-            rows: [["mobile-app.Foo.bar", "Method", "lib/foo.dart", 0.4]],
-          },
+          cols: ["qn", "label", "file", "lines", "rank"],
+          rows: [["mobile-app.lib.product.ProductCard.build", "Method", "lib/product/product_card.dart", "51-51", -18.9]],
         };
       }
       throw new Error(`unexpected tool ${tool}`);
@@ -117,15 +125,31 @@ test("ExistingMemoryAdapter uses one list_projects plus one search_graph call an
   });
 
   const details = await adapter.searchDetailed({
-    query: "fix Foo.bar crash",
+    query: "fix ProductCard padding",
     projectRoot: "/repo",
     limit: 8,
+    identifiers: ["ProductCard"],
   });
-  assert.deepEqual(tools, ["list_projects", "search_graph"]);
-  assert.equal(details.requestCount, 2);
+  assert.deepEqual(tools, ["list_projects", "search_graph", "search_graph"]);
+  assert.equal(details.requestCount, 3);
   assert.equal(details.projectName, "mobile-app");
-  assert.equal(details.hits.length, 1);
   assert.equal(details.unavailableReason, undefined);
+  assert.ok(details.hits.some((hit) => hit.id.includes("ProductCard")));
+  assert.ok(details.hits[0]?.id.includes("ProductCard"));
+  assert.ok(queries.some((args) => Array.isArray(args.semantic_query)));
+  assert.ok(queries.some((args) => args.query === "ProductCard"));
+});
+
+test("parseSearchGraphHits maps BM25 rank into a comparable score", () => {
+  const hits = parseSearchGraphHits(
+    {
+      cols: ["qn", "label", "file", "lines", "rank"],
+      rows: [["mobile-app.lib.product.ProductCard.build", "Method", "lib/product/product_card.dart", "51-51", -18.9]],
+    },
+    "mobile-app",
+  );
+  assert.equal(hits[0]?.source, "lib/product/product_card.dart");
+  assert.ok((hits[0]?.score ?? 0) > 0.5);
 });
 
 test("unwrapCliPayload surfaces CLI errors without retrying", () => {
@@ -133,4 +157,29 @@ test("unwrapCliPayload surfaces CLI errors without retrying", () => {
     () => unwrapCliPayload(JSON.stringify({ isError: true, content: [{ type: "text", text: "boom" }] })),
     /boom/,
   );
+});
+
+test("reconcileMemoryHits prefers identifier ProductCard hits over weak semantic shadow hits", () => {
+  const merged = reconcileMemoryHits(
+    [
+      {
+        id: "mobile-app.shadow.scale",
+        source: "lib/box_decoration_in.dart",
+        score: 0.07,
+        content: "scale",
+      },
+    ],
+    [
+      {
+        id: "mobile-app.lib.product.ProductCard.build",
+        source: "lib/product/product_card.dart",
+        score: 0.97,
+        symbols: ["ProductCard"],
+        content: "ProductCard",
+      },
+    ],
+    ["ProductCard"],
+  );
+  assert.equal(merged[0]?.id, "mobile-app.lib.product.ProductCard.build");
+  assert.ok(merged.some((hit) => hit.id === "mobile-app.shadow.scale"));
 });

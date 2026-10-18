@@ -12,6 +12,7 @@ export type MemorySearchInput = {
   projectRoot: string;
   limit: number;
   filters?: Record<string, string>;
+  identifiers?: string[];
 };
 
 export interface ExistingMemoryAdapter {

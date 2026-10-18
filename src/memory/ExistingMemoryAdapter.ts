@@ -10,6 +10,7 @@ import {
   MemorySearchInput,
   MemoryUnavailableError,
 } from "./MemoryAdapter";
+import { reconcileMemoryHits } from "./reconcileHits";
 
 const execFileAsync = promisify(execFile);
 
@@ -68,19 +69,50 @@ export class ExistingMemoryAdapter implements ExistingMemoryAdapterContract {
       }
 
       const semanticQuery = buildSemanticQuery(input.query);
+      const identifierQuery = buildIdentifierQuery(input);
+      const pageSize = Math.min(Math.max(input.limit, 1), 50);
       requestCount += 1;
-      const payload = (await this.runCli(this.cliPath, "search_graph", {
+      const semanticTask = this.runCli(this.cliPath, "search_graph", {
         project: projectName,
         semantic_query: semanticQuery,
-        limit: Math.min(Math.max(input.limit, 1), 50),
-        semantic_limit: Math.min(Math.max(input.limit, 1), 50),
+        limit: pageSize,
+        semantic_limit: pageSize,
         format: "json",
         max_output_tokens: 2000,
         include_connected: false,
-      })) as SearchGraphPayload;
+      }) as Promise<SearchGraphPayload>;
 
+      let identifierHits: MemoryHit[] = [];
+      if (identifierQuery) {
+        requestCount += 1;
+        try {
+          const identifierPayload = (await this.runCli(this.cliPath, "search_graph", {
+            project: projectName,
+            query: identifierQuery,
+            limit: pageSize,
+            format: "json",
+            max_output_tokens: 2000,
+            include_connected: false,
+          })) as SearchGraphPayload;
+          identifierHits = parseSearchGraphHits(identifierPayload, projectName);
+        } catch {
+          identifierHits = [];
+        }
+      }
+
+      let semanticHits: MemoryHit[] = [];
+      try {
+        semanticHits = parseSearchGraphHits(await semanticTask, projectName);
+      } catch {
+        semanticHits = [];
+      }
+
+      const hits = reconcileMemoryHits(semanticHits, identifierHits, identifierTerms(input));
+      if (hits.length === 0 && semanticHits.length === 0 && identifierHits.length === 0) {
+        return { hits: [], requestCount, projectName };
+      }
       return {
-        hits: parseSearchGraphHits(payload, projectName),
+        hits,
         requestCount,
         projectName,
       };
@@ -192,7 +224,7 @@ export function parseSearchGraphHits(payload: SearchGraphPayload, projectName: s
       const qn = stringAt(row, index.qn);
       const file = stringAt(row, index.file);
       const label = stringAt(row, index.label);
-      const score = numberAt(row, index.score);
+      const score = coerceScore(numberAt(row, index.score), numberAt(row, index.rank));
       if (!qn && !file) {
         continue;
       }
@@ -212,6 +244,49 @@ export function parseSearchGraphHits(payload: SearchGraphPayload, projectName: s
 function buildSemanticQuery(query: string): string[] {
   const primary = query.trim().slice(0, 500);
   return primary ? [primary] : ["code"];
+}
+
+function identifierTerms(input: MemorySearchInput): string[] {
+  const fromInput = (input.identifiers ?? []).map((value) => value.trim()).filter((value) => value.length >= 3);
+  if (fromInput.length > 0) {
+    return uniqueTerms(fromInput).slice(0, 8);
+  }
+  return uniqueTerms(input.query.split(/[^\p{L}\p{N}_.-]+/u).filter((value) => /[A-Z]/.test(value) && value.length >= 3)).slice(
+    0,
+    8,
+  );
+}
+
+function buildIdentifierQuery(input: MemorySearchInput): string | undefined {
+  const terms = identifierTerms(input);
+  return terms.length > 0 ? terms.join(" ") : undefined;
+}
+
+function uniqueTerms(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+
+function coerceScore(score?: number, rank?: number): number | undefined {
+  if (typeof score === "number") {
+    return score;
+  }
+  if (typeof rank !== "number") {
+    return undefined;
+  }
+  if (rank >= 0 && rank <= 1) {
+    return rank;
+  }
+  return 0.5 + Math.min(0.45, Math.abs(rank) / 40);
 }
 
 function formatHitContent(input: { qn?: string; file?: string; label?: string; projectName: string }): string {
