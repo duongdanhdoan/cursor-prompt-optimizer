@@ -59,7 +59,7 @@ Search this repo / Tìm extension này trên Google, GitHub, VS Marketplace:
 
 ## Install / Cài đặt
 
-1. Download / Tải `cursor-prompt-optimizer-0.1.0.vsix` from [Releases](https://github.com/duongdanhdoan/cursor-prompt-optimizer/releases).
+1. Download / Tải `cursor-prompt-optimizer-0.1.1.vsix` from [Releases](https://github.com/duongdanhdoan/cursor-prompt-optimizer/releases).
 2. Command Palette → **Extensions: Install from VSIX…**
 3. Reload Window.
 4. **macOS:** to auto-replace Agent input — **System Settings → Privacy & Security → Accessibility → Cursor**.

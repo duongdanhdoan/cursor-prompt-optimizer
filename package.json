@@ -2,7 +2,7 @@
   "name": "cursor-prompt-optimizer",
   "displayName": "Prompt Optimizer",
   "description": "Improve a copied prompt with on-demand Semantic Codebase Memory, then one coding-model rewrite. Preview before you replace anything.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "duong",
   "private": false,
   "repository": {
