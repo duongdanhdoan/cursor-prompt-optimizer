@@ -1,0 +1,217 @@
+{
+  "name": "cursor-prompt-optimizer",
+  "displayName": "Prompt Optimizer",
+  "description": "Improve a copied prompt with on-demand Semantic Codebase Memory, then one coding-model rewrite. Preview before you replace anything.",
+  "version": "0.1.0",
+  "publisher": "duong",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/duongdanhdoan/cursor-prompt-optimizer.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "promptOptimizer",
+          "title": "Prompt Optimizer",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "promptOptimizer": [
+        {
+          "type": "webview",
+          "id": "promptOptimizer.sidebar",
+          "name": "Optimizer",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "promptOptimizer.improveSelection",
+        "title": "Improve Prompt",
+        "category": "Prompt Optimizer",
+        "icon": "$(wand)"
+      },
+      {
+        "command": "promptOptimizer.fromChat",
+        "title": "prompt optimizer",
+        "category": "Prompt Optimizer"
+      },
+      {
+        "command": "promptOptimizer.optimizeClipboard",
+        "title": "Optimize Cursor Chat Prompt",
+        "category": "Prompt Optimizer"
+      },
+      {
+        "command": "promptOptimizer.openSidebar",
+        "title": "Open Sidebar",
+        "category": "Prompt Optimizer"
+      },
+      {
+        "command": "promptOptimizer.setOpenAIApiKey",
+        "title": "Set OpenAI-Compatible API Key",
+        "category": "Prompt Optimizer"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "promptOptimizer.improveSelection",
+          "when": "editorHasSelection",
+          "group": "1_modification@0"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "promptOptimizer.improveSelection"
+        },
+        {
+          "command": "promptOptimizer.fromChat"
+        },
+        {
+          "command": "promptOptimizer.optimizeClipboard"
+        },
+        {
+          "command": "promptOptimizer.openSidebar"
+        },
+        {
+          "command": "promptOptimizer.setOpenAIApiKey"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "promptOptimizer.improveSelection",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o"
+      },
+      {
+        "command": "promptOptimizer.optimizeClipboard",
+        "key": "ctrl+alt+shift+o",
+        "mac": "cmd+alt+shift+o"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "promptOptimizer.optimize",
+        "name": "optimizer",
+        "fullName": "Prompt Optimizer",
+        "description": "Rewrite a prompt with Semantic Codebase Memory. One model call, no tools.",
+        "isSticky": false
+      }
+    ],
+    "configuration": {
+      "title": "Prompt Optimizer",
+      "properties": {
+        "promptOptimizer.memory.cliPath": {
+          "type": "string",
+          "default": "codebase-memory-mcp",
+          "description": "Path to the existing codebase-memory-mcp binary. Embeddings and search stay inside that binary; this extension does not create an index."
+        },
+        "promptOptimizer.memory.tokenBudget": {
+          "type": ["number", "null"],
+          "default": null,
+          "minimum": 0,
+          "maximum": 8000,
+          "description": "Override memory tokens sent to the model. Leave empty to use the selected profile budget. If the original prompt is long, memory is reduced first; the original request is never truncated."
+        },
+        "promptOptimizer.memory.minScoreRatio": {
+          "type": "number",
+          "default": 0.15,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Drop memory hits whose score is below this fraction of the top score, unless they match an extracted identifier."
+        },
+        "promptOptimizer.profile": {
+          "type": "string",
+          "enum": ["auto", "simple", "normal", "complex", "large"],
+          "default": "auto",
+          "description": "Latency-first generation profile. auto picks simple/normal/complex/large from the local analyzer (no extra model call). Default behavior is Normal."
+        },
+        "promptOptimizer.llm.provider": {
+          "type": "string",
+          "enum": ["vscode", "openai-compatible"],
+          "default": "vscode",
+          "description": "vscode uses the editor language-model API (Cursor/VS Code). openai-compatible uses one Chat Completions, Responses, or Messages request. This is not a coding-agent loop: no tools, n=1, no retries."
+        },
+        "promptOptimizer.llm.apiStyle": {
+          "type": "string",
+          "enum": ["chat-completions", "responses", "messages"],
+          "default": "chat-completions",
+          "description": "chat-completions uses /chat/completions. responses uses /responses. messages uses /messages."
+        },
+        "promptOptimizer.llm.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI-compatible base URL. Used only when provider is openai-compatible."
+        },
+        "promptOptimizer.llm.model": {
+          "type": "string",
+          "default": "gpt-4.1",
+          "description": "Model name for the openai-compatible provider. Prefer a small/fast coding model, not the main agent model."
+        },
+        "promptOptimizer.llm.temperature": {
+          "type": "number",
+          "default": 0.1,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Sampling temperature. 0.1 is the latency-first default. Leave sendTemperature off if the provider rejects this field."
+        },
+        "promptOptimizer.llm.sendTemperature": {
+          "type": "boolean",
+          "default": true,
+          "description": "If false, temperature is omitted from the request instead of assuming the provider accepts it."
+        },
+        "promptOptimizer.llm.maxOutputTokens": {
+          "type": ["number", "null"],
+          "default": null,
+          "minimum": 600,
+          "maximum": 4000,
+          "description": "Override max output tokens. Empty uses the profile: simple 600, normal 1200, complex 2000, large 3000. Do not set this below 600."
+        },
+        "promptOptimizer.llm.stream": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stream the single completion when the API supports SSE. There is still only one request; failed streams are not retried automatically."
+        },
+        "promptOptimizer.llm.reasoningEffort": {
+          "type": "string",
+          "enum": ["omit", "minimal", "low", "medium", "high"],
+          "default": "omit",
+          "description": "Choose effort in the sidebar. Omit by default so unsupported providers are not sent a guessed field."
+        },
+        "promptOptimizer.llm.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional API key for openai-compatible provider. Prefer the sidebar Save config action, which stores the key in Secret Storage."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p tsconfig.json",
+    "watch": "tsc -watch -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test out-test/tests/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.7.2"
+  }
+}
