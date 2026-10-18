@@ -59,7 +59,7 @@ Search this repo / Tìm extension này trên Google, GitHub, VS Marketplace:
 
 ## Install / Cài đặt
 
-1. Download / Tải `cursor-prompt-optimizer-0.1.1.vsix` from [Releases](https://github.com/duongdanhdoan/cursor-prompt-optimizer/releases).
+1. Download / Tải `cursor-prompt-optimizer-0.1.2.vsix` from [Releases](https://github.com/duongdanhdoan/cursor-prompt-optimizer/releases).
 2. Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) → **Extensions: Install from VSIX…** → chọn file `.vsix`.
 3. **Developer: Reload Window**.
 4. **macOS (optional):** để tự thay ô Agent — **System Settings → Privacy & Security → Accessibility** → bật **Cursor**.
