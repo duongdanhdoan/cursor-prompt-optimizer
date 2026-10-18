@@ -1,10 +1,18 @@
-# Prompt Optimizer
+# Cursor Prompt Optimizer
 
-**VI** — Extension Cursor/VS Code: viết lại prompt **một lần**, dùng Semantic Codebase Memory (MCP) khi có, rồi đưa kết quả vào ô Agent đang mở nếu có thể. Không viết code, không mở Agent mới, không tạo index mới, không spawn sub-agent.
+**VI** — Extension **Cursor** / **VS Code**: viết lại prompt **một lần** (prompt rewriter / improve prompt), dùng **Semantic Codebase Memory** (MCP `codebase-memory-mcp`) khi có, rồi đưa kết quả vào ô **Cursor Agent** / composer đang mở nếu có thể. Không viết code, không mở Agent mới, không tạo index mới, không spawn sub-agent.
 
-**EN** — Cursor/VS Code extension: rewrite a prompt **once**, using Semantic Codebase Memory (MCP) when available, then put the result into the **current** Agent input if possible. It does not write code, open a new Agent, create a new index, or spawn sub-agents.
+**EN** — **Cursor** / **VS Code** extension: rewrite an AI coding prompt **once** (prompt optimizer / prompt rewriter), using **Semantic Codebase Memory** (MCP `codebase-memory-mcp`) when available, then put the result into the **current Cursor Agent** / composer input if possible. It does not write code, open a new Agent, create a new index, or spawn sub-agents.
 
 Repo: [github.com/duongdanhdoan/cursor-prompt-optimizer](https://github.com/duongdanhdoan/cursor-prompt-optimizer)
+
+## Keywords / Từ khóa
+
+Search this repo / Tìm extension này trên Google, GitHub, VS Marketplace:
+
+**EN:** Cursor prompt optimizer · Cursor AI extension · VS Code prompt optimizer · Cursor Agent prompt · Cursor composer prompt · Cursor chat prompt · improve Cursor prompt · rewrite prompt for Cursor · prompt rewriter · prompt engineering VS Code · LLM prompt optimizer · OpenAI-compatible prompt · Semantic Codebase Memory · MCP codebase-memory-mcp · BM25 identifier search · Cursor VSIX · vscode extension prompt · coding agent prompt · Agent input replace
+
+**VI:** tối ưu prompt Cursor · extension Cursor · tối ưu prompt VS Code · viết lại prompt Agent Cursor · cải thiện prompt Cursor · prompt Cursor composer · tối ưu prompt AI · prompt engineering Cursor · bộ nhớ codebase ngữ nghĩa · MCP codebase memory · cài VSIX Cursor · extension tối ưu prompt · viết lại prompt coding · Cursor chat prompt
 
 ## Benefits / Lợi ích
 
