@@ -6,6 +6,7 @@ import { PromptHistory } from "../history/promptHistory";
 import { readApiKey, type EffortSetting } from "../config/settingsStore";
 import type { ApiStyle } from "../llm/openaiCompatibleClient";
 import { extractPromptFromConversation } from "../prompt/extractChatPrompt";
+import { readActiveComposerInput } from "./insertIntoAgentChat";
 
 export type OptimizeSource = "clipboard" | "editor-selection" | "sidebar" | "chat";
 
@@ -68,11 +69,17 @@ export async function optimizePromptText(input: {
   return result;
 }
 
-export async function readPromptSource(): Promise<{
+export async function readPromptSource(options?: { preferComposer?: boolean }): Promise<{
   text: string;
   source: OptimizeSource;
   editor?: vscode.TextEditor;
 }> {
+  if (options?.preferComposer) {
+    const fromComposer = extractPromptFromConversation(await readActiveComposerInput());
+    if (fromComposer) {
+      return { text: fromComposer, source: "chat" };
+    }
+  }
   const selected = firstNonEmptySelection();
   if (selected) {
     return {

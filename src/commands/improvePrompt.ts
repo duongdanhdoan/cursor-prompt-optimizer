@@ -13,11 +13,14 @@ export function registerImprovePromptCommand(
   history: PromptHistory,
   _sidebar: PromptOptimizerSidebar,
 ): vscode.Disposable {
-  const run = async () => {
-    const { text, editor } = await readPromptSource();
+  const runFromChat = async () => runOptimize({ preferComposer: true });
+  const runFromSelection = async () => runOptimize({ preferComposer: false });
+
+  async function runOptimize(options: { preferComposer: boolean }): Promise<void> {
+    const { text, editor } = await readPromptSource(options);
     if (!text) {
       void vscode.window.showWarningMessage(
-        "Select or copy the current chat prompt, then run Prompt Optimizer: prompt optimizer.",
+        "Không đọc được prompt trong ô Agent. Hãy focus ô chat rồi chạy lại, hoặc copy prompt trước.",
       );
       return;
     }
@@ -25,7 +28,7 @@ export function registerImprovePromptCommand(
     try {
       const result = await vscode.window.withProgress(
         {
-          location: vscode.ProgressLocation.Notification,
+          location: vscode.ProgressLocation.Window,
           title: "Prompt Optimizer",
           cancellable: false,
         },
@@ -38,8 +41,11 @@ export function registerImprovePromptCommand(
           }),
       );
 
-      const applied = await insertIntoAgentChatInput(result.optimized);
+      const applied = await insertIntoAgentChatInput(result.optimized, (message) =>
+        output.appendLine(message),
+      );
       if (applied === "input") {
+        void vscode.window.showInformationMessage("Đã thay prompt trong ô Agent chat hiện tại.");
         return;
       }
       const replaced = await applyOptimizedPrompt({
@@ -48,18 +54,20 @@ export function registerImprovePromptCommand(
         editor,
       });
       if (replaced === "copied") {
-        void vscode.window.showInformationMessage("Optimized prompt copied. Paste it into the Agent chat input.");
+        void vscode.window.showInformationMessage(
+          "Không thay được ô Agent. Prompt đã copy — click vào ô chat rồi Cmd+V.",
+        );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Optimize failed.";
       output.appendLine(`error ${message}`);
       void vscode.window.showErrorMessage(message);
     }
-  };
+  }
 
   return vscode.Disposable.from(
-    vscode.commands.registerCommand("promptOptimizer.improveSelection", run),
-    vscode.commands.registerCommand("promptOptimizer.fromChat", run),
+    vscode.commands.registerCommand("promptOptimizer.improveSelection", runFromSelection),
+    vscode.commands.registerCommand("promptOptimizer.fromChat", runFromChat),
   );
 }
 
@@ -77,7 +85,7 @@ export function registerClipboardOptimizeCommand(
     }
     const result = await vscode.window.withProgress(
       {
-        location: vscode.ProgressLocation.Notification,
+        location: vscode.ProgressLocation.Window,
         title: "Prompt Optimizer",
         cancellable: false,
       },
@@ -89,9 +97,9 @@ export function registerClipboardOptimizeCommand(
           history,
         }),
     );
-    const applied = await insertIntoAgentChatInput(result.optimized);
+    const applied = await insertIntoAgentChatInput(result.optimized, (message) => output.appendLine(message));
     if (applied !== "input") {
-      void vscode.window.showInformationMessage("Optimized prompt copied. Paste it into the Agent chat input.");
+      void vscode.window.showInformationMessage("Không thay được ô Agent. Prompt đã copy — click vào ô chat rồi Cmd+V.");
     }
   });
 }
