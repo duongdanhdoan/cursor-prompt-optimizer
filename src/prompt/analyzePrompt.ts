@@ -5,6 +5,7 @@ export type TaskType =
   | "ui"
   | "test"
   | "docs"
+  | "explain"
   | "other";
 
 export type PromptAnalysis = {
@@ -15,6 +16,7 @@ export type PromptAnalysis = {
   errorMessages: string[];
   constraints: string[];
   searchQuery: string;
+  vague: boolean;
 };
 
 const TASK_PATTERNS: Array<{ type: TaskType; pattern: RegExp; weight: number }> = [
@@ -33,7 +35,7 @@ const TASK_PATTERNS: Array<{ type: TaskType; pattern: RegExp; weight: number }> 
     type: "ui",
     weight: 3,
     pattern:
-      /\b(ui|ux|padding|margin|spacing|layout|css|stylesheet|giao diện|font|color|button|screen|pixel|alignment|responsive)\b/i,
+      /\b(ui|ux|padding|margin|spacing|layout|css|stylesheet|giao diện|font|color|button|screen|pixel|alignment|responsive|empty state)\b/i,
   },
   {
     type: "refactor",
@@ -124,7 +126,16 @@ const FILE_PATH_RE =
   /(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]+|[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|py|dart|go|rs|java|kt|swift|cs|rb|php|css|html|json|yaml|yml|md)/g;
 
 const IDENTIFIER_RE =
-  /\b(?:[A-Z][a-zA-Z0-9]+(?:[A-Z][a-zA-Z0-9]+){0,4}|[a-z][a-zA-Z0-9]*(?:[A-Z][a-zA-Z0-9]+){1,4}|[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+)\b/g;
+  /\b(?:[A-Z][a-zA-Z0-9]+(?:[A-Z][a-zA-Z0-9]+){0,4}|[a-z][a-zA-Z0-9]*(?:[A-Z][a-zA-Z0-9]+){1,4}|[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+|_[A-Za-z][A-Za-z0-9]*)\b/g;
+
+const CHANGE_REQUEST_RE =
+  /\b(fix|hotfix|sửa lỗi|implement|thêm|dựng|add support|new endpoint|new screen|refactor|migrate|change the code|update the code)\b/i;
+
+const EXPLAIN_REQUEST_RE =
+  /\b(what|which|explain|how does|how do|làm gì|là gì|những gì|action nào|đang có|mô tả|liệt kê|tell me)\b|\bnào\b/i;
+
+const VAGUE_REQUEST_RE =
+  /^(fix|sửa|repair|handle)\s+(this|it|the issue|this issue|lỗi này|vấn đề này)\.?$/i;
 
 const ERROR_LINE_RE =
   /(?:Error|Exception|FATAL|panic|Unhandled|TypeError|RangeError|Assert(?:ion)?Error|HttpException|GraphQLError)[:\s][^\n]{3,240}/gi;
@@ -159,10 +170,23 @@ export function analyzePrompt(original: string): PromptAnalysis {
     errorMessages,
     constraints,
     searchQuery,
+    vague: isVagueRequest(text),
   };
 }
 
+export function subjectIdentifiers(analysis: PromptAnalysis): string[] {
+  return analysis.identifiers.filter((identifier) => {
+    if (identifier.length < 6) {
+      return false;
+    }
+    return /[a-z][A-Z]/.test(identifier) || identifier.includes("_") || /^[A-Z][A-Z0-9_]{5,}$/.test(identifier);
+  });
+}
+
 export function classifyTask(text: string): TaskType {
+  if (EXPLAIN_REQUEST_RE.test(text) && !CHANGE_REQUEST_RE.test(text)) {
+    return "explain";
+  }
   const scores = new Map<TaskType, number>();
   for (const candidate of TASK_PATTERNS) {
     if (candidate.pattern.test(text)) {
@@ -229,7 +253,17 @@ function extractConstraints(text: string): string[] {
       found.push(value);
     }
   }
+  for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+    const trimmed = sentence.trim().replace(/[.!?]+$/, "");
+    if (/^(?:don't|do not|must not|never|không được|đừng)\b/i.test(trimmed) && trimmed.length >= 12) {
+      found.push(trimmed);
+    }
+  }
   return found;
+}
+
+function isVagueRequest(text: string): boolean {
+  return VAGUE_REQUEST_RE.test(text.replace(/\s+/g, " ").trim());
 }
 
 function moduleFromPath(filePath: string): string | undefined {

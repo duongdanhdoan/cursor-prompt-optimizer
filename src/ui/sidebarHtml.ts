@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import type { LlmUiConfig } from "../config/settingsStore";
+import type { TaskContract } from "../prompt/taskContract";
 
 export type SidebarRenderState = {
   config: LlmUiConfig;
@@ -8,6 +9,8 @@ export type SidebarRenderState = {
   metrics: string;
   error: string;
   busy: boolean;
+  warnings: string[];
+  contract: TaskContract | null;
   history: Array<{
     id: string;
     createdAt: string;
@@ -64,6 +67,17 @@ export function renderSidebarHtml(webview: vscode.Webview, state: SidebarRenderS
       -webkit-user-select: text;
     }
     textarea { min-height: 120px; resize: vertical; }
+    textarea.section { min-height: 72px; }
+    .warn { color: var(--vscode-editorWarning-foreground, #d6a23a); white-space: pre-wrap; margin: 0 0 8px; }
+    .status {
+      display: none;
+      margin: 8px 0;
+      padding: 8px;
+      border-radius: 6px;
+      background: var(--vscode-editorWidget-background, #1f2428);
+      border: 1px solid var(--vscode-widget-border, #2a3036);
+    }
+    .status.visible { display: block; }
     .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
     button {
       border: 0;
@@ -147,8 +161,11 @@ export function renderSidebarHtml(webview: vscode.Webview, state: SidebarRenderS
       <button id="optimize">Optimize</button>
     </div>
     <p class="error" id="error"></p>
+    <div class="status" id="status">Đang enhance prompt…</div>
     <h2>Result</h2>
-    <pre id="result"></pre>
+    <div class="warn" id="warnings"></div>
+    <div id="sections"></div>
+    <textarea id="result" hidden spellcheck="false"></textarea>
     <div class="muted" id="metrics"></div>
     <div class="row">
       <button id="copy">Copy to Cursor chat</button>
@@ -176,9 +193,31 @@ export function renderSidebarHtml(webview: vscode.Webview, state: SidebarRenderS
     const model = document.getElementById("model");
     const prompt = document.getElementById("prompt");
     const result = document.getElementById("result");
+    const sections = document.getElementById("sections");
+    const warnings = document.getElementById("warnings");
     const metrics = document.getElementById("metrics");
     const error = document.getElementById("error");
+    const status = document.getElementById("status");
     const history = document.getElementById("history");
+    const HEADINGS = [
+      ["context", "1. Context"],
+      ["objective", "2. Objective"],
+      ["steps", "3. Steps"],
+      ["output", "4. Output"],
+      ["constraints", "5. Constraints and Rules"]
+    ];
+    function serializeContract() {
+      if (state.contract) {
+        return HEADINGS.map(([id, heading]) => {
+          const value = (document.getElementById(id)?.value || "").trim();
+          return "## " + heading + "\\n\\n" + value;
+        }).join("\\n\\n");
+      }
+      return result.value;
+    }
+    function emitOptimized() {
+      vscode.postMessage({ type: "editOptimized", optimized: serializeContract() });
+    }
 
     function tick() {
       clock.textContent = new Date().toLocaleString();
@@ -195,9 +234,25 @@ export function renderSidebarHtml(webview: vscode.Webview, state: SidebarRenderS
       ? "Config saved " + new Date(state.config.savedAt).toLocaleString()
       : "Config not saved yet";
     prompt.value = state.original || "";
-    result.textContent = state.optimized || "";
+    warnings.textContent = (state.warnings || []).join("\\n");
     metrics.textContent = state.metrics || "";
     error.textContent = state.error || "";
+    status.textContent = state.busy ? "Đang enhance prompt…" : "";
+    status.classList.toggle("visible", Boolean(state.busy));
+    if (state.contract) {
+      sections.innerHTML = HEADINGS.map(([id, heading]) =>
+        "<label>" + heading + "</label><textarea id=\\"" + id + "\\" class=\\"section\\" spellcheck=\\"false\\"></textarea>"
+      ).join("");
+      HEADINGS.forEach(([id]) => {
+        const field = document.getElementById(id);
+        field.value = state.contract[id] || "";
+        field.addEventListener("input", emitOptimized);
+      });
+    } else {
+      result.hidden = false;
+      result.value = state.optimized || "";
+      result.addEventListener("input", emitOptimized);
+    }
     if (state.busy) {
       document.querySelectorAll("button").forEach((button) => button.disabled = true);
     }
@@ -248,7 +303,7 @@ export function renderSidebarHtml(webview: vscode.Webview, state: SidebarRenderS
     });
     document.getElementById("optimize").addEventListener("click", () => vscode.postMessage({ type: "optimize", prompt: prompt.value }));
     document.getElementById("optimizeChat").addEventListener("click", () => vscode.postMessage({ type: "optimizeChat", prompt: prompt.value }));
-    document.getElementById("copy").addEventListener("click", () => vscode.postMessage({ type: "copyResult" }));
+    document.getElementById("copy").addEventListener("click", () => vscode.postMessage({ type: "copyResult", optimized: serializeContract() }));
     document.getElementById("clear").addEventListener("click", () => vscode.postMessage({ type: "clearHistory" }));
     history.addEventListener("click", (event) => {
       const button = event.target.closest("[data-id]");

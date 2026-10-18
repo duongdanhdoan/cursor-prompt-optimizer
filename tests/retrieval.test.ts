@@ -91,6 +91,35 @@ test("rankResults drops builtins, weak hits, duplicates, and off-repo paths", ()
   );
 });
 
+test("rankResults should drop unrelated _loadStores test hits for a recomProduct request", () => {
+  const analysis = analyzePrompt(
+    "dựng theo contract: recomProduct(page: PRODUCTDETAIL | CART, zone: SIMILAR_PRODUCT, productId | variantIds, limit: 8). Nhận data: [] thì hiện empty state.",
+  );
+  const ranked = rankResults(
+    [
+      {
+        id: "optimizer._loadStores",
+        source: "tests/intent-preservation.test.ts",
+        score: 0.91,
+        symbols: ["_loadStores"],
+        content: "Find `_loadStores` in the current repository",
+      },
+      {
+        id: "app.recomProduct",
+        source: "lib/recom_product.dart",
+        score: 0.2,
+        symbols: ["recomProduct"],
+        content: "recomProduct similar product",
+      },
+    ],
+    analysis,
+  );
+  assert.deepEqual(
+    ranked.map((hit) => hit.id),
+    ["app.recomProduct"],
+  );
+});
+
 test("ExistingMemoryAdapter uses semantic search plus identifier search and never indexes", async () => {
   const tools: string[] = [];
   const queries: Array<Record<string, unknown>> = [];

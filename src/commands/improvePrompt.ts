@@ -3,6 +3,8 @@ import { applyOptimizedPrompt, optimizePromptText, readPromptSource } from "./op
 import { insertIntoAgentChatInput } from "./insertIntoAgentChat";
 import { resolveChatPrompt } from "../prompt/extractChatPrompt";
 import { PromptOptimizerSidebar } from "../ui/sidebarView";
+import { showPreviewPanel } from "../ui/previewPanel";
+import { notifyOptimizeSuccess, withOptimizeProgress } from "../ui/notifyOptimizeResult";
 import { PromptHistory } from "../history/promptHistory";
 import { saveLlmUiConfig, type EffortSetting } from "../config/settingsStore";
 import type { ApiStyle } from "../llm/openaiCompatibleClient";
@@ -17,7 +19,7 @@ export function registerImprovePromptCommand(
   const runFromSelection = async () => runOptimize({ preferComposer: false });
 
   async function runOptimize(options: { preferComposer: boolean }): Promise<void> {
-    const { text, editor } = await readPromptSource(options);
+    const { text, source, editor } = await readPromptSource(options);
     if (!text) {
       void vscode.window.showWarningMessage(
         "Không đọc được prompt trong ô Agent. Hãy focus ô chat rồi chạy lại, hoặc copy prompt trước.",
@@ -26,38 +28,49 @@ export function registerImprovePromptCommand(
     }
 
     try {
-      const result = await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Window,
-          title: "Prompt Optimizer",
-          cancellable: false,
-        },
-        async () =>
-          optimizePromptText({
-            context,
-            output,
-            text,
-            history,
-          }),
-      );
+      await withOptimizeProgress(async (report) => {
+        const result = await optimizePromptText({
+          context,
+          output,
+          text,
+          history,
+          onProgress: report,
+        });
 
-      const applied = await insertIntoAgentChatInput(result.optimized, (message) =>
-        output.appendLine(message),
-      );
-      if (applied === "input") {
-        void vscode.window.showInformationMessage("Đã thay prompt trong ô Agent chat hiện tại.");
-        return;
-      }
-      const replaced = await applyOptimizedPrompt({
-        original: result.original,
-        optimized: result.optimized,
-        editor,
-      });
-      if (replaced === "copied") {
-        void vscode.window.showInformationMessage(
-          "Không thay được ô Agent. Prompt đã copy — click vào ô chat rồi Cmd+V.",
+        if (!options.preferComposer && source === "editor-selection") {
+          report("Đang mở preview…");
+          await showPreviewPanel({
+            original: result.original,
+            optimized: result.optimized,
+            metrics: result.metrics,
+            source: "editor-selection",
+            editor,
+            output,
+            warnings: result.warnings,
+          });
+          return;
+        }
+
+        report("Đang thay ô Agent…");
+        const applied = await insertIntoAgentChatInput(result.optimized, (message) =>
+          output.appendLine(message),
         );
-      }
+        if (applied === "input") {
+          notifyOptimizeSuccess("Đã thay prompt trong ô Agent chat hiện tại.", result.warnings);
+          return;
+        }
+        const replaced = await applyOptimizedPrompt({
+          original: result.original,
+          optimized: result.optimized,
+          editor,
+        });
+        if (replaced === "copied") {
+          notifyOptimizeSuccess(
+            "Không thay được ô Agent. Prompt đã copy — click vào ô chat rồi Cmd+V.",
+            result.warnings,
+          );
+        }
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Optimize failed.";
       output.appendLine(`error ${message}`);
@@ -83,24 +96,22 @@ export function registerClipboardOptimizeCommand(
       void vscode.window.showWarningMessage("Clipboard is empty.");
       return;
     }
-    const result = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Window,
-        title: "Prompt Optimizer",
-        cancellable: false,
-      },
-      async () =>
-        optimizePromptText({
-          context,
-          output,
-          text,
-          history,
-        }),
-    );
-    const applied = await insertIntoAgentChatInput(result.optimized, (message) => output.appendLine(message));
-    if (applied !== "input") {
-      void vscode.window.showInformationMessage("Không thay được ô Agent. Prompt đã copy — click vào ô chat rồi Cmd+V.");
-    }
+    await withOptimizeProgress(async (report) => {
+      const result = await optimizePromptText({
+        context,
+        output,
+        text,
+        history,
+        onProgress: report,
+      });
+      report("Đang thay ô Agent…");
+      const applied = await insertIntoAgentChatInput(result.optimized, (message) => output.appendLine(message));
+      if (applied === "input") {
+        notifyOptimizeSuccess("Đã thay prompt trong ô Agent chat hiện tại.", result.warnings);
+      } else {
+        notifyOptimizeSuccess("Không thay được ô Agent. Prompt đã copy — click vào ô chat rồi Cmd+V.", result.warnings);
+      }
+    });
   });
 }
 

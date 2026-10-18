@@ -4,6 +4,8 @@ import { optimizePromptText } from "../commands/optimizeRunner";
 import { formatMetrics } from "../telemetry/requestMetrics";
 import { loadLlmUiConfig, saveLlmUiConfig } from "../config/settingsStore";
 import { renderSidebarHtml } from "./sidebarHtml";
+import { notifyOptimizeSuccess, withOptimizeProgress } from "./notifyOptimizeResult";
+import { parseTaskContract } from "../prompt/taskContract";
 import type { ImprovePipelineResult } from "../commands/runImprovePipeline";
 import type { ApiStyle } from "../llm/openaiCompatibleClient";
 import type { EffortSetting } from "../config/settingsStore";
@@ -16,6 +18,7 @@ export class PromptOptimizerSidebar implements vscode.WebviewViewProvider {
   optimized = "";
   private metrics = "";
   private error = "";
+  private warnings: string[] = [];
   private busy = false;
 
   constructor(
@@ -81,10 +84,17 @@ export class PromptOptimizerSidebar implements vscode.WebviewViewProvider {
         await this.optimize((await vscode.env.clipboard.readText()).trim() || message.prompt || this.original, true);
         return;
       case "copyResult":
+        if (message.optimized) {
+          this.optimized = message.optimized;
+        }
         if (this.optimized) {
           await vscode.env.clipboard.writeText(this.optimized);
           void vscode.window.showInformationMessage("Optimized prompt copied. Paste it into Cursor Agent chat.");
         }
+        return;
+      case "editOptimized":
+        this.optimized = message.optimized;
+        this.warnings = [];
         return;
       case "openHistory": {
         const item = this.history.get(message.id);
@@ -93,6 +103,7 @@ export class PromptOptimizerSidebar implements vscode.WebviewViewProvider {
           this.optimized = item.optimized;
           this.metrics = `${item.profile ?? ""} · ${item.createdAt}`;
           this.error = "";
+          this.warnings = [];
           await this.refresh();
         }
         return;
@@ -116,29 +127,28 @@ export class PromptOptimizerSidebar implements vscode.WebviewViewProvider {
     }
     this.busy = true;
     this.error = "";
+    this.warnings = [];
     this.original = text;
     await this.refresh();
     try {
-      const result = await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: "Prompt Optimizer",
-          cancellable: false,
-        },
-        async () =>
-          optimizePromptText({
-            context: this.context,
-            output: this.output,
-            text,
-            history: this.history,
-          }),
+      const result = await withOptimizeProgress(async (report) =>
+        optimizePromptText({
+          context: this.context,
+          output: this.output,
+          text,
+          history: this.history,
+          onProgress: report,
+        }),
       );
       this.original = result.original;
       this.optimized = result.optimized;
       this.metrics = formatMetrics(result.metrics);
+      this.warnings = result.warnings;
       if (copyBackToClipboard) {
         await vscode.env.clipboard.writeText(result.optimized);
-        void vscode.window.showInformationMessage("Optimized prompt copied. Paste it into Cursor Agent chat.");
+        notifyOptimizeSuccess("Optimized prompt copied. Paste it into Cursor Agent chat.", result.warnings);
+      } else if (result.warnings.length > 0) {
+        notifyOptimizeSuccess("Prompt enhanced.", result.warnings);
       }
       return result;
     } catch (error) {
@@ -164,6 +174,8 @@ export class PromptOptimizerSidebar implements vscode.WebviewViewProvider {
       metrics: this.metrics,
       error: this.error,
       busy: this.busy,
+      warnings: this.warnings,
+      contract: contractFromOptimized(this.optimized),
       history: this.history.list().map(historyPreview),
     });
   }
@@ -184,7 +196,16 @@ type SidebarMessage =
   | { type: "clearPrompt" }
   | { type: "optimize"; prompt: string }
   | { type: "optimizeChat"; prompt: string }
-  | { type: "copyResult" }
+  | { type: "copyResult"; optimized?: string }
+  | { type: "editOptimized"; optimized: string }
   | { type: "openHistory"; id: string }
   | { type: "deleteHistory"; id: string }
   | { type: "clearHistory" };
+
+function contractFromOptimized(optimized: string) {
+  const parsed = parseTaskContract(optimized);
+  if (!parsed || parsed.missing.length > 0) {
+    return null;
+  }
+  return parsed.contract;
+}

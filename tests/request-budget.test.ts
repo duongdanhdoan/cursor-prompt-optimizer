@@ -6,6 +6,7 @@ import type { MemoryHit } from "../src/memory/MemoryAdapter";
 import { runImprovePipeline } from "../src/commands/runImprovePipeline";
 import { createOpenAICompatibleClient } from "../src/llm/openaiCompatibleClient";
 import { exceededModelBudget } from "../src/telemetry/requestMetrics";
+import { fiveSectionMarkdown } from "./contractFixture";
 
 function hit(id: string, extra = ""): MemoryHit {
   return {
@@ -47,7 +48,7 @@ test("pipeline makes exactly one coding-model request even when memory is unavai
         assert.equal(input.maxOutputTokens, 1_200);
         assert.equal(input.temperature, 0.1);
         assert.equal(input.stream, true);
-        return { text: "Goal\nInvestigate CheckoutController.submit." };
+        return { text: fiveSectionMarkdown({ objective: "Investigate CheckoutController.submit." }) };
       },
     },
   });
@@ -86,7 +87,7 @@ test("openai-compatible payload is one streamed completion with a 1200-token cap
     model: "demo-model",
     fetchImpl: async (_url, init) => {
       captured = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: "Goal\nDone." } }] })}\n\ndata: [DONE]\n`;
+      const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: fiveSectionMarkdown({ objective: "Done." }) } }] })}\n\ndata: [DONE]\n`;
       return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
     },
   });
@@ -99,7 +100,8 @@ test("openai-compatible payload is one streamed completion with a 1200-token cap
     stream: true,
   });
 
-  assert.equal(result.text, "Done.");
+  assert.match(result.text, /## 2\. Objective/);
+  assert.match(result.text, /Done\./);
   assert.equal(captured?.model, "demo-model");
   assert.equal(captured?.n, 1);
   assert.equal(captured?.temperature, 0.1);
@@ -136,7 +138,7 @@ test("successful pipeline counts one model request and keeps memory under budget
     adapter,
     model: {
       async completeOnce() {
-        return { text: "Goal\nFix CheckoutController.submit." };
+        return { text: fiveSectionMarkdown({ objective: "Fix CheckoutController.submit." }) };
       },
     },
   });

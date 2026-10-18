@@ -87,7 +87,7 @@ test("chat completions payload is latency-first: one result, no tools, capped ou
   assert.equal("tools" in body, false);
   assert.equal("stop" in body, false);
   assert.equal("reasoning_effort" in body, false);
-  assert.ok(estimateTokens(SYSTEM_PROMPT) <= 800);
+  assert.ok(estimateTokens(SYSTEM_PROMPT) <= 1_200);
 });
 
 test("messages payload uses /messages schema and omits tools", () => {

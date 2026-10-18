@@ -105,6 +105,9 @@ export function allocateMemoryBudget(input: {
 }
 
 function isSimpleTask(analysis: PromptAnalysis, original: string): boolean {
+  if (analysis.taskType === "explain") {
+    return estimateTokens(original) <= 400;
+  }
   if (analysis.taskType === "bug" && (analysis.errorMessages.length > 0 || hasCrashLanguage(original))) {
     return false;
   }

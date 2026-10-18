@@ -11,8 +11,11 @@ const WEAK_SOURCE_MARKERS = ["<python-builtins>", "<builtins>", "node_modules/",
 export function rankResults(hits: MemoryHit[], analysis: PromptAnalysis, options: RankOptions = {}): MemoryHit[] {
   const minScoreRatio = options.minScoreRatio ?? 0.15;
   const identifierNeedles = needlesFromAnalysis(analysis);
+  const subjects = subjectNeedles(analysis);
   const scored = hits
     .filter((hit) => isEligibleHit(hit, options.projectRoot))
+    .filter((hit) => analysis.taskType === "test" || !isTestSource(hit.source))
+    .filter((hit) => isOnOriginalSubject(hit, subjects))
     .map((hit) => {
       const identifierBoost = identifierNeedles.some((needle) => matchesNeedle(hit, needle)) ? 0.4 : 0;
       const moduleBoost = analysis.modules.some((moduleName) => matchesNeedle(hit, moduleName)) ? 0.25 : 0;
@@ -38,6 +41,23 @@ export function rankResults(hits: MemoryHit[], analysis: PromptAnalysis, options
     }
   }
   return [...unique.values()];
+}
+
+function subjectNeedles(analysis: PromptAnalysis): string[] {
+  return [...analysis.identifiers, ...analysis.filePaths].filter((value) => value.length >= 6);
+}
+
+function isOnOriginalSubject(hit: MemoryHit, subjects: string[]): boolean {
+  if (subjects.length === 0) {
+    return true;
+  }
+  const haystack = `${hit.id} ${hit.source ?? ""} ${hit.symbols?.join(" ") ?? ""} ${hit.content}`.toLowerCase();
+  return subjects.some((subject) => haystack.includes(subject.toLowerCase()));
+}
+
+function isTestSource(source?: string): boolean {
+  const value = source ?? "";
+  return /(?:^|\/)tests?(?:\/|$)/i.test(value) || /\.(?:test|spec)\.[A-Za-z0-9]+$/i.test(value);
 }
 
 function isEligibleHit(hit: MemoryHit, projectRoot?: string): boolean {
@@ -78,6 +98,6 @@ function matchesNeedle(hit: MemoryHit, needle: string): boolean {
   if (!needle || needle.length < 3) {
     return false;
   }
-  const haystack = `${hit.id} ${hit.source ?? ""} ${hit.symbols?.join(" ") ?? ""}`.toLowerCase();
+  const haystack = `${hit.id} ${hit.source ?? ""} ${hit.symbols?.join(" ") ?? ""} ${hit.content}`.toLowerCase();
   return haystack.includes(needle.toLowerCase());
 }

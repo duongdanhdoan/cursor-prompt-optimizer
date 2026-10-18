@@ -16,8 +16,8 @@ Search this repo / Tìm extension này trên Google, GitHub, VS Marketplace:
 
 ## Benefits / Lợi ích
 
-- **VI:** Prompt gọn, đúng task — model chỉ trả một prompt hoàn chỉnh, không thêm Goal/Scope/checklist nếu bạn không viết sẵn.  
-  **EN:** Compact, task-true output — one complete prompt, no Goal/Scope checklist unless the original already used that shape.
+- **VI:** Prompt thành **task contract 5 phần** — Context, Objective, Steps, Output, Constraints and Rules. Giữ ý định gốc, không tự bịa file/nguyên nhân, không kéo dài task đơn giản.
+  **EN:** Output is a **five-section task contract** — Context, Objective, Steps, Output, Constraints and Rules. It keeps the original intent, does not invent files or causes, and does not inflate a simple task.
 
 - **VI:** Bối cảnh từ codebase thật — khi MCP đã index (`full`/`moderate`), retrieval gồm semantic + identifier (BM25). Symbol như `ProductCard` được ưu tiên hơn hit semantic lệch.  
   **EN:** Real codebase context — with a `full`/`moderate` MCP index, retrieval is semantic + identifier (BM25). Identifiers such as `ProductCard` outrank weak semantic hits.
@@ -39,17 +39,17 @@ Search this repo / Tìm extension này trên Google, GitHub, VS Marketplace:
 - **VI:** Không dùng được index nội bộ của Cursor. Agent/`@codebase` dùng index riêng; extension không có API công khai để query. Memory chỉ đến từ [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp). Hai hệ thống không chia hit.  
   **EN:** Cursor’s built-in codebase index is not accessible. Agent/`@codebase` uses a private index with no public extension API. Optimizer memory comes only from [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp). The two indexes do not share hits.
 
-- **VI:** Thay ô Agent không phải API chính thức. Cursor không cho extension ghi `composer.text`. Trên macOS dùng Accessibility (focus composer, click đáy panel, Cmd+A/V). Có thể fail khi ô đã có nội dung dài, layout đổi, hoặc quyền Accessibility chưa cấp cho **Cursor**. Lúc đó prompt chỉ nằm trên clipboard.  
-  **EN:** Replacing Agent input is unofficial. Cursor does not expose `composer.text`. On macOS the extension uses Accessibility (focus composer, click the bottom of the panel, Cmd+A/V). This can fail after a long prompt, a layout change, or if **Cursor** lacks Accessibility permission. Then the result stays on the clipboard.
+- **VI:** Thay ô Agent không phải API chính thức. Cursor không cho extension ghi `composer.text`. Trên macOS dùng Accessibility (focus composer, click đỉnh/đáy panel, Cmd+A/V). Có thể fail khi layout đổi hoặc chưa cấp Accessibility cho **Cursor**. Lúc đó prompt chỉ nằm trên clipboard.
+  **EN:** Replacing Agent input is unofficial. Cursor does not expose `composer.text`. On macOS the extension uses Accessibility (focus composer, click the top and bottom of the panel, Cmd+A/V). This can fail after a layout change or if **Cursor** lacks Accessibility permission. Then the result stays on the clipboard.
 
-- **VI:** Lần đầu có thể thay được, lần sau không. Ô trống dễ ghi AX; prompt dài làm ô phình lên. Đã đổi sang click đáy panel, nhưng vẫn phụ thuộc UI Cursor và Accessibility — không đảm bảo 100%.  
+- **VI:** Lần đầu có thể thay được, lần sau không. Chat *New Agent* để ô nhập phía trên. Extension click đỉnh và đáy, nhưng vẫn phụ thuộc UI Cursor và Accessibility — không đảm bảo 100%.
   **EN:** The first empty-input replace may work, later ones may not. Empty fields accept AX value writes; a long prompt grows the box. The click-at-bottom path is more robust but still depends on Cursor’s UI and Accessibility — not guaranteed.
 
 - **VI:** Workspace chưa index semantic (ví dụ mode `fast`, ít node) → `memoryStatus=empty`; prompt vẫn được viết lại từ yêu cầu gốc.  
   **EN:** If the workspace has no semantic index (e.g. `fast` mode, few nodes) → `memoryStatus=empty`; the prompt is still rewritten from the original request alone.
 
-- **VI:** Không đọc DOM chat Cursor. Bôi đen trong composer không phải editor selection. Command Palette đọc ô Agent qua Accessibility (macOS) hoặc clipboard.  
-  **EN:** The extension cannot read Cursor chat DOM. Composer selection is not an editor selection. Command Palette reads Agent input via Accessibility (macOS) or the clipboard.
+- **VI:** Không đọc DOM chat Cursor. Bôi đen trong composer không phải editor selection. Command Palette **prompt optimizer** chỉ đọc ô Agent (macOS Accessibility), không lấy selection trong editor.
+  **EN:** The extension cannot read Cursor chat DOM. Composer selection is not an editor selection. Command Palette **prompt optimizer** reads Agent input only (macOS Accessibility); it does not use the editor selection.
 
 - **VI:** Windows/Linux không có AppleScript; kết quả copy clipboard, phải dán tay.  
   **EN:** Windows/Linux have no AppleScript path; the result is copied and must be pasted manually.
@@ -60,48 +60,121 @@ Search this repo / Tìm extension này trên Google, GitHub, VS Marketplace:
 ## Install / Cài đặt
 
 1. Download / Tải `cursor-prompt-optimizer-0.1.1.vsix` from [Releases](https://github.com/duongdanhdoan/cursor-prompt-optimizer/releases).
-2. Command Palette → **Extensions: Install from VSIX…**
-3. Reload Window.
-4. **macOS:** to auto-replace Agent input — **System Settings → Privacy & Security → Accessibility → Cursor**.
+2. Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) → **Extensions: Install from VSIX…** → chọn file `.vsix`.
+3. **Developer: Reload Window**.
+4. **macOS (optional):** để tự thay ô Agent — **System Settings → Privacy & Security → Accessibility** → bật **Cursor**.
 
-Cần / Requires `codebase-memory-mcp` (default `~/.local/bin/codebase-memory-mcp`) and a workspace indexed with `index_repository` mode `full` or `moderate`.
+Memory MCP là tùy chọn. Không có index thì extension vẫn enhance từ prompt gốc (một lần gọi model).
+
+**Optional memory:** cài [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp), đưa CLI vào `PATH` (lệnh mặc định `codebase-memory-mcp`; macOS thường `~/.local/bin/codebase-memory-mcp`). Index **workspace sẽ code** bằng `index_repository` mode `full` hoặc `moderate`. Extension **không** tự tạo index.
+
+## First setup / Cấu hình lần đầu
+
+1. Mở sidebar **Prompt Optimizer** (icon trên Activity Bar).
+2. Điền:
+   - **API URL** — ví dụ `https://api.openai.com/v1` (OpenAI-compatible).
+   - **API style** — `chat-completions` (mặc định), `responses`, hoặc `messages`.
+   - **Model** — model nhỏ/nhanh để rewrite prompt (không cần model Agent chính).
+   - **Effort** — để `omit` trừ khi provider bắt buộc.
+   - **API key** — dán vào ô password, **không** ghi vào `settings.json`.
+3. **Save config**. Key nằm Secret Storage (macOS Keychain / Windows Credential Manager).
+4. (Tùy chọn) Settings: `promptOptimizer.memory.cliPath` nếu CLI không nằm trên `PATH`.
+
+Không Save key thì dùng provider `vscode` (language model trong editor) nếu có. `openai-compatible` cần key.
+
+## Output / Kết quả
+
+Mỗi lần Enhance trả **một** prompt Markdown, đúng 5 phần theo thứ tự:
+
+1. **Context** — bối cảnh đã biết; phân biệt fact / assumption / unknown. Memory chỉ khi liên quan, kèm source, unverified.
+2. **Objective** — đúng việc user hỏi; không thêm chiều phân tích ngoài yêu cầu.
+3. **Steps** — quy trình tối thiểu. Câu hỏi đơn giản thì ngắn; bug/fix mới điều tra trước khi sửa.
+4. **Output** — bàn giao gì (empty state, giải thích, patch…). Không bịa test/report.
+5. **Constraints and Rules** — điều cấm và giới hạn gốc.
+
+Không gọi model lần hai. Nếu output đổi chủ đề (ví dụ `recomProduct` → `_loadStores`) hoặc thiếu section, Output channel **Prompt Optimizer** ghi `warning …`. Pipeline có thể thay bằng contract local từ prompt gốc.
 
 ## Usage / Cách dùng
 
-### Command Palette (Agent input)
+Chọn **một** luồng. Không mở Agent mới, không spawn sub-agent, không `index_repository`.
+
+### 1. Sidebar (mọi OS — cách ổn định nhất)
 
 **VI**
-1. Gõ prompt trong ô Agent của **session đang mở**.
-2. Cmd+Shift+P → **Prompt Optimizer: prompt optimizer**.
-3. Thành công: toast *Đã thay prompt trong ô Agent chat hiện tại.*
-4. Fail: toast bảo đã copy — click lại ô chat, Cmd+V. Xem Output **Prompt Optimizer** (`composer-ax …`).
+1. Copy prompt từ ô Agent, hoặc gõ vào textarea sidebar.
+2. Bấm **Optimize** (hoặc **Optimize chat prompt** nếu vừa load clipboard).
+3. Đợi notification: phân tích → memory → model → kiểm tra.
+4. Sửa 5 ô nếu cần → **Copy to Cursor chat** → click ô Agent → dán (`Cmd+V` / `Ctrl+V`).
 
 **EN**
-1. Type the prompt in the Agent box of the **open session**.
-2. Cmd+Shift+P → **Prompt Optimizer: prompt optimizer**.
-3. Success: toast *Đã thay prompt trong ô Agent chat hiện tại.*
-4. Failure: toast says it was copied — click the chat box, Cmd+V. Check Output **Prompt Optimizer** (`composer-ax …`).
+1. Copy the Agent prompt, or type it in the sidebar.
+2. Click **Optimize**.
+3. Wait for the progress notification.
+4. Edit the five sections if needed → **Copy to Cursor chat** → click the Agent box → paste.
 
-Does not call `workbench.action.chat.open` (that creates a new composer).
+Sidebar **không** tự ghi vào ô Agent.
 
-### Sidebar
+### 2. Command Palette — ô Agent (macOS)
 
-**VI** — Icon **Prompt Optimizer** trên Activity Bar: cấu hình API, Optimize, History. Sidebar không ghi vào ô Agent trừ khi bạn copy kết quả.  
-**EN** — **Prompt Optimizer** Activity Bar icon: API config, Optimize, History. The sidebar does not write into Agent input unless you copy the result.
+Chỉ macOS + Accessibility cho **Cursor**. Windows/Linux: dùng sidebar hoặc clipboard (mục 1 / 4).
 
-### Editor
+**VI**
+1. Gõ prompt trong ô Agent của **session đang mở** (không tạo chat mới).
+2. `Cmd+Shift+P` → **Prompt Optimizer: prompt optimizer**.
+3. Thành công: toast *Đã thay prompt trong ô Agent chat hiện tại.*
+4. Fail: toast đã copy — click ô chat, `Cmd+V`. Xem Output **Prompt Optimizer** (`composer-ax …`, `composer.focusComposer …`).
 
-**VI** — Bôi đen trong file → chuột phải **Improve Prompt** hoặc `Cmd+Alt+O`.  
-**EN** — Select text in a file → right-click **Improve Prompt** or `Cmd+Alt+O`.
+Lệnh này **chỉ đọc ô Agent**. Không lấy text đang bôi trong editor (tránh enhance nhầm symbol trong file test).
+
+**EN**
+1. Type in the **open** Agent session.
+2. Command Palette → **Prompt Optimizer: prompt optimizer**.
+3. Success replaces the current Agent input. Failure copies; paste yourself.
+4. This command does **not** fall back to the editor selection.
+
+Does not call `workbench.action.chat.open` (that opens a new composer).
+
+### 3. Editor selection (mọi OS)
+
+**VI**
+1. Bôi đen prompt trong file.
+2. Chuột phải **Improve Prompt**, hoặc `Cmd+Alt+O` / `Ctrl+Alt+O`.
+3. Preview: trái = gốc, phải = 5 phần sửa được. **Copy**, **Replace selection**, hoặc **Cancel**.
+
+**EN** — Select text → **Improve Prompt** or `Ctrl+Alt+O` (`Cmd+Alt+O` on Mac). Preview, then copy / replace / cancel.
+
+### 4. Clipboard (mọi OS)
+
+1. Copy prompt (`Cmd+C` / `Ctrl+C`).
+2. `Cmd+Alt+Shift+O` / `Ctrl+Alt+Shift+O`, hoặc Command Palette **Optimize Cursor Chat Prompt**.
+3. macOS: cố gắng dán vào Agent. Windows/Linux: copy kết quả — dán tay (`Ctrl+V`).
+
+## Platform
+
+| | macOS | Windows / Linux |
+| --- | --- | --- |
+| Sidebar optimize + copy | Có | Có |
+| Editor preview / replace | Có | Có |
+| Đọc / thay ô Agent tự động | Có (Accessibility, không 100%) | Không — copy rồi `Ctrl+V` |
+| API key Secret Storage | Keychain | Credential Manager |
+| Memory MCP | CLI trên `PATH` | CLI trên `PATH`; set `memory.cliPath` nếu cần |
+
+## Troubleshooting / Khi lệch kết quả
+
+- **Enhance ra symbol khác** (`recomProduct` → `_loadStores`): bản này không lấy editor selection khi chạy từ ô Agent, và bỏ memory hit trong `tests/` / hit không chứa symbol gốc. Reload Window sau khi cài VSIX. Output **Prompt Optimizer** có `warning` nếu bị thay chủ đề.
+- **Không đọc được ô Agent:** focus ô chat rồi chạy lại, hoặc copy vào sidebar. Windows luôn đi sidebar/clipboard.
+- **Không thay được ô Agent (macOS):** cấp Accessibility cho **Cursor** (không phải Terminal). Chat *New Agent* để ô nhập phía trên; extension click cả đỉnh và đáy. Fail → `Cmd+V`.
+- **memoryStatus=empty:** workspace chưa index MCP, hoặc index nhỏ. Vẫn enhance từ prompt gốc.
+- **Không có API key:** Save key trên sidebar, hoặc bật language model editor (`promptOptimizer.llm.provider`: `vscode`).
 
 ## Memory
 
-**VI — thứ tự thực tế / EN — actual order**
+**Thứ tự thực tế / actual order**
 
-1. **Codebase Memory MCP** — `search_graph` semantic + identifier.
-2. **No memory** — still one model call from the original prompt.
+1. **Codebase Memory MCP** — `search_graph` semantic + identifier (BM25). Hit trong `tests/` bị bỏ nếu task không phải test. Hit không chứa symbol trong prompt gốc bị bỏ.
+2. **No memory** — vẫn một model call từ prompt gốc.
 
-Cursor IDE index is **not** in this chain / Index Cursor (IDE) **không** nằm trong chuỗi này.
+Cursor IDE index **không** nằm trong chuỗi này. Extension **không** gọi `index_repository`.
 
 ## Settings
 

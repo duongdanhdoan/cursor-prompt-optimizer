@@ -5,6 +5,9 @@ import { estimateTokens, renderMemoryBlock, selectContext } from "../memory/sele
 import { analyzePrompt } from "../prompt/analyzePrompt";
 import { buildTaskContractGuidance, renderTaskContractGuidance } from "../prompt/buildTaskContract";
 import { SYSTEM_PROMPT } from "../prompt/systemPrompt";
+import { parseTaskContract, serializeTaskContract } from "../prompt/taskContract";
+import { validateEnhancedPrompt } from "../prompt/validateEnhancedPrompt";
+import { buildLocalTaskContract } from "../prompt/localTaskContract";
 import { RequestMetrics } from "../telemetry/requestMetrics";
 import { CodingModelClient } from "../llm/openaiCompatibleClient";
 import {
@@ -30,6 +33,7 @@ export type ImprovePipelineInput = {
   adapter: ExistingMemoryAdapter;
   model: CodingModelClient;
   now?: () => number;
+  onProgress?: (message: string) => void;
 };
 
 export type ImprovePipelineResult = {
@@ -38,6 +42,7 @@ export type ImprovePipelineResult = {
   metrics: RequestMetrics;
   analysisTaskType: string;
   profile: ModelProfileName;
+  warnings: string[];
 };
 
 export async function runImprovePipeline(input: ImprovePipelineInput): Promise<ImprovePipelineResult> {
@@ -47,10 +52,13 @@ export async function runImprovePipeline(input: ImprovePipelineInput): Promise<I
   }
 
   const now = input.now ?? Date.now;
+  const report = input.onProgress ?? (() => undefined);
+  report("Đang phân tích prompt…");
   const analysis = analyzePrompt(original);
   const guidance = buildTaskContractGuidance(analysis);
   const guidanceText = renderTaskContractGuidance(guidance);
 
+  report("Đang tìm Semantic Memory…");
   const retrievalStarted = now();
   const memory = await input.adapter.searchDetailed({
     query: analysis.searchQuery,
@@ -99,6 +107,7 @@ export async function runImprovePipeline(input: ImprovePipelineInput): Promise<I
   const stream = input.stream ?? true;
   const reasoningEffort = input.reasoningEffort && input.reasoningEffort !== "omit" ? input.reasoningEffort : undefined;
 
+  report("Đang viết task contract…");
   const apiStarted = now();
   const completion = await input.model.completeOnce({
     system: SYSTEM_PROMPT,
@@ -110,6 +119,19 @@ export async function runImprovePipeline(input: ImprovePipelineInput): Promise<I
     reasoningEffort,
   });
   const apiMs = Math.max(0, now() - apiStarted);
+  report("Đang kiểm tra kết quả…");
+  let optimized = canonicalizeEnhancedPrompt(completion.text);
+  const validation = validateEnhancedPrompt({
+    original,
+    enhanced: optimized,
+    analysis,
+    memoryHits: selected.hits,
+    taskType: analysis.taskType,
+  });
+  const warnings = validation.warnings.map((warning) => warning.message);
+  if (validation.warnings.some((warning) => warning.code === "topic_substitution")) {
+    optimized = buildLocalTaskContract(original, analysis);
+  }
 
   const metrics: RequestMetrics = {
     memoryRequests: memory.requestCount,
@@ -129,11 +151,20 @@ export async function runImprovePipeline(input: ImprovePipelineInput): Promise<I
 
   return {
     original,
-    optimized: completion.text,
+    optimized,
     metrics,
     analysisTaskType: analysis.taskType,
     profile: profileName,
+    warnings,
   };
+}
+
+function canonicalizeEnhancedPrompt(text: string): string {
+  const parsed = parseTaskContract(text);
+  if (!parsed || parsed.missing.length > 0) {
+    return text.trim();
+  }
+  return serializeTaskContract(parsed.contract);
 }
 
 export function memoryFallbackNote(reason?: string): string {
@@ -175,8 +206,13 @@ function buildUserPrompt(input: {
     memoryHeader,
     input.memoryBlock,
     "",
-    "Rewrite the original request into one improved prompt the user can send next.",
-    "Do not output a task-contract template. Do not repeat phrases.",
+    input.identifiers.length
+      ? `Keep these identifiers in the enhanced prompt: ${input.identifiers.join(", ")}.`
+      : "No extracted identifiers.",
+    "Never replace the original subject with a different symbol from memory.",
+    "Enhance the original request into the five-section task contract.",
+    "The Objective must match the original request. Do not add lifecycle, error-handling, performance, security, or test work unless the original named it.",
+    "Keep simple questions short. Do not add work the user did not ask for.",
   ].join("\n");
 }
 

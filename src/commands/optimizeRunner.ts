@@ -15,6 +15,7 @@ export async function optimizePromptText(input: {
   output: vscode.OutputChannel;
   text: string;
   history: PromptHistory;
+  onProgress?: (message: string) => void;
 }): Promise<ImprovePipelineResult> {
   const original = extractPromptFromConversation(input.text);
   if (!original) {
@@ -55,6 +56,7 @@ export async function optimizePromptText(input: {
       apiStyle,
       stream,
     }),
+    onProgress: input.onProgress,
   });
 
   await input.history.add({
@@ -64,8 +66,13 @@ export async function optimizePromptText(input: {
     apiStyle,
   });
   input.output.appendLine(
-    `${new Date().toISOString()} style=${apiStyle} profile=${result.profile} modelRequests=${result.metrics.codingModelRequests}`,
+    `${new Date().toISOString()} style=${apiStyle} profile=${result.profile} modelRequests=${result.metrics.codingModelRequests} warnings=${result.warnings.length}`,
   );
+  if (result.warnings.length > 0) {
+    for (const warning of result.warnings) {
+      input.output.appendLine(`warning ${warning}`);
+    }
+  }
   return result;
 }
 
@@ -76,9 +83,7 @@ export async function readPromptSource(options?: { preferComposer?: boolean }): 
 }> {
   if (options?.preferComposer) {
     const fromComposer = extractPromptFromConversation(await readActiveComposerInput());
-    if (fromComposer) {
-      return { text: fromComposer, source: "chat" };
-    }
+    return { text: fromComposer, source: "chat" };
   }
   const selected = firstNonEmptySelection();
   if (selected) {
